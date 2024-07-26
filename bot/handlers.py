@@ -1,24 +1,43 @@
 import telebot
 from config import TOKEN
 from telebot import types
+import os
+import threading
 
 bot = telebot.TeleBot(TOKEN)
 
 def send_menu(chat_id, text):
-    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-    btn1 = types.KeyboardButton('Ingresar al servicio')
-    btn2 = types.KeyboardButton('Registrar un nuevo medico')
-    btn3 = types.KeyboardButton('Tutorial de uso')
+    keyboard = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    btn1 = telebot.types.KeyboardButton('Ingresar al servicio')
+    btn2 = telebot.types.KeyboardButton('Registrar un nuevo medico')
+    btn3 = telebot.types.KeyboardButton('Tutorial de uso')
     keyboard.add(btn1, btn2, btn3)
     bot.send_message(chat_id, text, reply_markup=keyboard)
+    reset_timer(chat_id, text)  # Resetear el temporizador al enviar el menú
 
 def send_service_menu(chat_id, text):
-    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-    btn1 = types.KeyboardButton('Enviar audio')
-    btn2 = types.KeyboardButton('Cancelar el último audio')
-    btn3 = types.KeyboardButton('Cerrar sesión')
-    keyboard.add(btn1, btn2, btn3)
+    keyboard = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    btn_send_audio = telebot.types.KeyboardButton('Enviar audio')
+    btn_cancel_audio = telebot.types.KeyboardButton('Cancelar último audio')
+    btn_logout = telebot.types.KeyboardButton('Cerrar sesión')
+    keyboard.add(btn_send_audio, btn_cancel_audio, btn_logout)
     bot.send_message(chat_id, text, reply_markup=keyboard)
+    reset_timer(chat_id, text)  # Resetear el temporizador al enviar el menú de servicio
+
+timers = {}
+
+def reset_timer(chat_id, text):
+    global timers
+    
+    # Cancelar el temporizador existente si existe
+    if chat_id in timers:
+        timers[chat_id].cancel()
+    
+    # Crear un nuevo temporizador para reiniciar el bot después de 10 minutos de inactividad
+    timer = threading.Timer(600, send_service_menu, args=[chat_id, text])
+    timers[chat_id] = timer
+    timer.start()
+
 
 # Manejo del comando /start
 @bot.message_handler(commands=['start', 'Hola'])
@@ -67,18 +86,44 @@ def tutorial_uso(message):
 
 # Manejo de la opción "Enviar audio"
 @bot.message_handler(func=lambda message: message.text == 'Enviar audio')
+
+
 def enviar_audio(message):
     bot.send_message(message.chat.id, 'Por favor, envíe el audio:')
     bot.register_next_step_handler(message, procesar_audio)
 
 def procesar_audio(message):
-    audio = message.audio
-    # Aquí deberías manejar el audio, por ahora simplemente confirmamos la recepción
-    bot.send_message(message.chat.id, 'Audio recibido con éxito.')
+    if message.content_type == 'voice':
+        file_id = message.voice.file_id
+    elif message.content_type == 'audio':
+        file_id = message.audio.file_id
+    else:
+        bot.send_message(message.chat.id, 'Formato de archivo no soportado. Por favor, envíe un mensaje de voz o un archivo de audio.')
+        return
+    
+    file_info = bot.get_file(file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+
+    #Ruta donde voy a guardar los audios, es relativo desde donde se ejecuta el script main.py
+
+    audio_folder = './audios'
+
+    #Por si no esta creada la carpeta
+    if not os.path.exists(audio_folder):
+        os.makedirs(audio_folder)    
+
+    #----------------------------------
+
+    file_path = os.path.join(audio_folder, f"{file_id}.ogg")
+    with open(file_path, 'wb') as new_file:
+        new_file.write(downloaded_file)
+    
+    bot.send_message(message.chat.id, 'Audio recibido con éxito y guardado en el servidor.')
     send_service_menu(message.chat.id, 'Seleccione una opción:')
 
 # Manejo de la opción "Cancelar el último audio"
 @bot.message_handler(func=lambda message: message.text == 'Cancelar el último audio')
+
 def cancelar_audio(message):
     # Aquí deberías cancelar el último audio
     bot.send_message(message.chat.id, 'Último audio cancelado.')
@@ -86,9 +131,26 @@ def cancelar_audio(message):
 
 # Manejo de la opción "Cerrar sesión"
 @bot.message_handler(func=lambda message: message.text == 'Cerrar sesión')
+
 def cerrar_sesion(message):
     bot.send_message(message.chat.id, 'Sesión cerrada. Volviendo al menú principal.')
     send_menu(message.chat.id, 'Seleccione una opción:')
+
+
+def guardar_audio(audio, user_id):
+    file_info = bot.get_file(audio.file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    extension = os.path.splitext(file_info.file_path)[1]
+    file_path = f'audios/{user_id}{extension}'
+    
+    if not os.path.exists('audios'):
+        os.makedirs('audios')
+    
+    with open(file_path, 'wb') as file:
+        file.write(downloaded_file)
+    
+    return file_path
+
 
 def run_bot():
     bot.polling()
