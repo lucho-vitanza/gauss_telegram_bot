@@ -100,25 +100,9 @@ def procesar_audio(message):
     else:
         bot.send_message(message.chat.id, 'Formato de archivo no soportado. Por favor, envíe un mensaje de voz o un archivo de audio.')
         return
-    
-    file_info = bot.get_file(file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
 
-    #Ruta donde voy a guardar los audios, es relativo desde donde se ejecuta el script main.py
-
-    audio_folder = './audios'
-
-    #Por si no esta creada la carpeta
-    if not os.path.exists(audio_folder):
-        os.makedirs(audio_folder)    
-
-    #----------------------------------
-
-    file_path = os.path.join(audio_folder, f"{file_id}.ogg")
-    with open(file_path, 'wb') as new_file:
-        new_file.write(downloaded_file)
-    
-    bot.send_message(message.chat.id, 'Audio recibido con éxito y guardado en el servidor.')
+    guardar_audio(file_id,message)
+        
     send_service_menu(message.chat.id, 'Seleccione una opción:')
 
 # Manejo de la opción "Cancelar el último audio"
@@ -137,20 +121,26 @@ def cerrar_sesion(message):
     send_menu(message.chat.id, 'Seleccione una opción:')
 
 
-def guardar_audio(audio, user_id):
-    file_info = bot.get_file(audio.file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    extension = os.path.splitext(file_info.file_path)[1]
-    file_path = f'audios/{user_id}{extension}'
-    
-    if not os.path.exists('audios'):
-        os.makedirs('audios')
-    
-    with open(file_path, 'wb') as file:
-        file.write(downloaded_file)
-    
-    return file_path
+def guardar_audio(file_id,message):
 
+    file_info = bot.get_file(file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+
+    #Ruta donde voy a guardar los audios, es relativo desde donde se ejecuta el script main.py
+
+    audio_folder = './audios'
+
+    #Por si no esta creada la carpeta
+    if not os.path.exists(audio_folder):
+        os.makedirs(audio_folder)    
+
+    #----------------------------------
+
+    file_path = os.path.join(audio_folder, f"{file_id}.ogg")
+    with open(file_path, 'wb') as new_file:
+        new_file.write(downloaded_file)
+    
+    bot.send_message(message.chat.id, 'Audio recibido con éxito y guardado en el servidor.')
 
 def run_bot():
     bot.polling()
