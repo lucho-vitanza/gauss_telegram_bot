@@ -11,8 +11,10 @@ estado_usuario = {}
 
 #Ruta donde voy a guardar los audios, es relativo desde donde se ejecuta el script main.py
 
-audio_folder = './audios'
+audio_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../audios'))
 
+
+active_users = set()  # Set para mantener un registro de usuarios activos
 
 
 def send_menu(chat_id, text):
@@ -26,12 +28,11 @@ def send_menu(chat_id, text):
 
 def send_service_menu(chat_id, text):
     keyboard = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-    btn_send_audio = telebot.types.KeyboardButton('Enviar audio')
-    btn_cancel_audio = telebot.types.KeyboardButton('Cancelar último audio')
-    btn_logout = telebot.types.KeyboardButton('Cerrar sesión')
-    keyboard.add(btn_send_audio, btn_cancel_audio, btn_logout)
+    btn1 = telebot.types.KeyboardButton('Enviar audio')
+    btn2 = telebot.types.KeyboardButton('Cancelar el último audio')
+    btn3 = telebot.types.KeyboardButton('Cerrar sesión')
+    keyboard.add(btn1, btn2, btn3)
     bot.send_message(chat_id, text, reply_markup=keyboard)
-    reset_timer(chat_id, text)  # Resetear el temporizador al enviar el menú de servicio
 
 
 #----------------------TIMER------------------------------
@@ -55,8 +56,11 @@ def reset_timer(chat_id, text):
 @bot.message_handler(commands=['start', 'Hola'])
 
 def start_message(message):
-    send_menu(message.chat.id, 'Seleccione una opción:')
+    user_id = message.chat.id
+    active_users.add(user_id)
+    send_menu(user_id, 'Seleccione una opción:')
 
+    
 #-----------------------Manejo de la opción "Ingresar al servicio"
 
 @bot.message_handler(func=lambda message: message.text == 'Ingresar al servicio')
@@ -145,42 +149,66 @@ def procesar_audio(message):
 # Manejo de la opción "Cancelar el último audio"
 
 @bot.message_handler(func=lambda message: message.text == 'Cancelar el último audio')
+def cancelar_audio(message):
+    user_id = str(message.chat.id)  # Convertir user_id a cadena para coincidir con las claves del JSON
 
-def cancelar_audio(message,audio_folder):
+    print(f"Cancelando audio para el usuario: {user_id}")  # Mensaje de depuración
 
-    user_id = message.chat.id
+    # Leer el estado del archivo JSON
     try:
-        with open('estado.json', 'r') as file:
+        estado_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../estado.json'))
+        with open(estado_file_path, 'r') as file:
             estado = json.load(file)
-
+        print(f"Estado cargado: {estado}")  # Mensaje de depuración
     except FileNotFoundError:
         estado = {}
+        print("Archivo estado.json no encontrado, creando uno nuevo.")  # Mensaje de depuración
 
+    # Obtener el ID del archivo de audio
     file_id = estado.pop(user_id, None)
+    print(f"ID del archivo a cancelar: {file_id}")  # Mensaje de depuración
 
     if file_id:
+        # Construir la ruta del archivo
         file_path = os.path.join(audio_folder, f"{file_id}.ogg")
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        else:
-            print(f"El archivo {file_path} no existe.")
-        
-        with open('estado.json', 'w') as file:
-            json.dump(estado, file)
-        
-        bot.send_message(message.chat.id, 'Último audio cancelado.')
-    else:
-        bot.send_message(message.chat.id,'No se encontró ningún audio para cancelar.')
 
+        # Eliminar el archivo si existe
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                bot.send_message(message.chat.id, 'Último audio cancelado.')
+                print(f"Archivo {file_path} eliminado.")  # Mensaje de depuración
+            except Exception as e:
+                bot.send_message(message.chat.id, f'Error al eliminar el archivo: {e}')
+                print(f"Error al eliminar el archivo: {e}")  # Mensaje de depuración
+        else:
+            bot.send_message(message.chat.id, f"El archivo {file_path} no existe.")
+            print(f"El archivo {file_path} no existe.")  # Mensaje de depuración
+
+        # Actualizar el archivo estado.json
+        try:
+            with open(estado_file_path, 'w') as file:
+                json.dump(estado, file)
+            print(f"Estado actualizado: {estado}")  # Mensaje de depuración
+        except Exception as e:
+            bot.send_message(message.chat.id, f'Error al actualizar el estado: {e}')
+            print(f"Error al actualizar el estado: {e}")  # Mensaje de depuración
+    else:
+        bot.send_message(message.chat.id, 'No se encontró ningún audio para cancelar.')
+        print("No se encontró ningún audio para cancelar.")  # Mensaje de depuración
+
+    # Enviar el menú de servicio
     send_service_menu(message.chat.id, 'Seleccione una opción:')
 
 # Manejo de la opción "Cerrar sesión"
 @bot.message_handler(func=lambda message: message.text == 'Cerrar sesión')
 
 def cerrar_sesion(message):
-    bot.send_message(message.chat.id, 'Sesión cerrada. Volviendo al menú principal.')
-    send_menu(message.chat.id, 'Seleccione una opción:')
-
+    user_id = message.chat.id
+    active_users.discard(user_id)
+    bot.send_message(user_id, 'Sesión cerrada. Volviendo al menú principal.')
+    send_menu(user_id, 'Seleccione una opción:')
+    bot.stop_polling()  # Detener el sondeo
 
 def guardar_audio(file_id,message,audio_folder):
 
