@@ -4,6 +4,10 @@ from telebot import types
 import os
 import threading
 import json
+import mysql.connector
+from mysql.connector import Error
+from config import DATABASE_URL
+
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -80,11 +84,36 @@ def validar_id(message):
         return
     
     user_id = message.text
-    # Aquí deberías validar el ID con la base de datos
-    # Por ahora, asumimos que el ID es válido
-    send_service_menu(message.chat.id, 'ID validado correctamente. Seleccione una opción:')
+    is_valid = verificar_id_en_db(user_id)
 
-    return user_id
+    if is_valid:
+        send_service_menu(message.chat.id, 'ID validado correctamente. Seleccione una opción:')
+    else:
+        bot.send_message(message.chat.id, 'ID no válido. Intente nuevamente.')
+        ingresar_servicio(message)  # Reiniciar el proceso
+
+def verificar_id_en_db(user_id):
+
+    try:
+        # Conectarse a la base de datos
+        connection = mysql.connector.connect(**DATABASE_URL)
+        
+        if connection.is_connected():
+            cursor = connection.cursor()
+            query = "SELECT id FROM users WHERE id = %s"
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchone()
+            return result is not None
+        
+    except Error as e:
+        print(f"Error al conectarse a MySQL: {e}")
+        return False
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+
 
 
 #------------------------ Manejo de la opción "Registrar un nuevo medico"
