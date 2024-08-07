@@ -87,10 +87,6 @@ def validar_id(message):
     return user_id
 
 
-
-
-
-
 #------------------------ Manejo de la opción "Registrar un nuevo medico"
 
 @bot.message_handler(func=lambda message: message.text == 'Registrar un nuevo medico')
